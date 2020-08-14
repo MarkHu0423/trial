@@ -158,7 +158,7 @@ sz10.plot(ax=ax, y='close', label='000010')
 plt.legend(loc='upper left')
 plt.show()
 ```
-所得折线图![](多只折现对比图.png)  
+所得折线图![](多只折线对比图.png)  
 
 ### 绘制多条股票数据的箱形图  
 ```python
@@ -167,13 +167,18 @@ closedf = pd.concat([closedf, sz5['close'], sz6['close'], sz7['close'], sz9['clo
 closedf.columns = ['000005', '000006', '000007', '000009', '000010']
 closedf.plot(kind='box')
 plt.show()
+```
+所得箱型图![](多只股票箱型图.png)  
 
-# 000007、000009、000010的箱形图出现了几个“O”，这表示这3支股票中存在温和的异常值，于是使用describe()方法对这3组数据的均值、分位数、标准差、最值等进行初步分析
+### 异常数据分析
+000007、000009、000010的箱形图出现了几个“O”，这表示这3支股票中存在温和的异常值，于是使用describe()方法对这3组数据的均值、分位数、标准差、最值等进行异常数据初步分析
+```python
 print(sz7.describe())  
 print(sz9.describe())
 print(sz10.describe())
 ```
-所得箱型图![](多只股票箱型图.png)  
+异常数据分析表![](异常数据分析表.png) 
+
 ### 绘制多只股票的对比直方图  
 ```python
 mean_share_list = [sz5['close'].mean(), sz6['close'].mean(), sz7['close'].mean(), sz9['close'].mean(), sz10['close'].mean()] 
@@ -182,7 +187,7 @@ mean_share_series.plot(kind='bar')
 plt.xticks
 plt.show()
 ```
-所获对比折线图![](对比直方图.png)  
+所获对比直方图![](对比直方图.png)  
 
 ## K线绘制
 ```python
@@ -194,6 +199,11 @@ from matplotlib import pyplot as plt
 from mplfinance.original_flavor import candlestick_ochl
 from matplotlib import ticker as mticker 
 from matplotlib import dates as mdates  
+from os import close
+from numpy.lib.function_base import append
+from numpy.lib.type_check import mintypecode
+from numpy.lib.utils import safe_eval
+
 data = pd.read_csv('_A_stock_k_data.csv')
 # 将dataframe中的日期类型转为浮点数格式
 def date_to_num(dates):
@@ -231,7 +241,7 @@ plt.ylabel('Stock Price and Volume', color='w')
 plt.show()
 ```
 所得k线图![](k线图.png)
-##绘制蓝白均线图及成交量
+## 绘制蓝白均线图及成交量
 ```python
 mov_avg_ten = plot_mat['close'].rolling(window=10).mean() # 计算每10天收盘价的均值，每次向下滚动1天
 mov_avg_thirty = plot_mat['close'].rolling(window=30).mean()  # 计算每30天收盘价的均值，每次向下滚动1天
@@ -254,9 +264,9 @@ ax_.tick_params(axis='y', colors='w')
 ax_.tick_params(axis='x', colors='w')
 
 ```
-##绘制RSI曲线
+## 绘制RSI曲线
 ```python
-ef cal_rsi(df0, period=6):  # 默认周期为6日
+def cal_rsi(df0, period=6):  # 默认周期为6日
     df0['diff'] = df0['close'] - df0['close'].shift(1)  # 用diff储存两天收盘价的差
     df0['diff'].fillna(0, inplace=True)  # 空值填充为0
     df0['up'] = df0['diff']  # diff赋值给up
@@ -292,5 +302,199 @@ ax0.tick_params(axis='x', colors='w')
 ax0.tick_params(axis='y', colors='w')
 plt.ylabel('RSI', color='w')
 ```
-##蓝白线以及RSI曲线图
+蓝白线以及RSI曲线图
 ![](蓝白线+rsi.png)
+
+## 绘制MADC图
+```python
+def cal_ema(df0, period, is_dea=False):  # DEA与EMA的计算方式相同，封装在同一个函数中，用is_dea来确认是否是DEA
+    for i in range(len(df0)):
+        if not is_dea:
+            if i == 0:
+                df0.loc[i, 'ema'+str(period)] = df0.loc[i, 'close']  # EMA初始值为当天收盘价
+            else:
+                df0.loc[i, 'ema'+str(period)] = (2*df0.loc[i, 'close']+(period-1)*df0.loc[i-1, 'ema'+str(period)])/(period+1)  # 按公式计算
+            ema = df0['ema'+str(period)]
+        else:
+            if i == 0:
+                df0.loc[i, 'dea'+str(period)] = df0.loc[i, 'dif']
+            else:
+                df0.loc[i, 'dea'+str(period)] = ((period-1)*df0.loc[i-1, 'dea'+str(period)]+2*df0.loc[i, 'dif']) / (period+1)
+            ema = df0['dea'+str(period)]
+    return ema
+
+def cal_macd(df0, short=12, long=26, m=9):
+    short_ema = cal_ema(df0, short)  # 计算12日EMA
+    long_ema = cal_ema(df0, long)  # 计算26日EMA
+    df0['dif'] = short_ema - long_ema  # 计算DIF
+    dea = cal_ema(df0, m, is_dea=True)  # 计算DEA
+    df0['macd'] = 2 * (df0['dif'] - df0['dea'+str(m)])  # 计算MACD
+    return df0
+
+plot_mat = cal_macd(plot_mat)
+
+fig = plt.figure(facecolor='#07000d', figsize=(15, 10))
+ax = plt.subplot2grid((6, 4), (1, 0), rowspan=4, colspan=4, facecolor='#07000d')
+
+
+# 绘制MACD线
+ax1 = plt.subplot2grid((6, 4), (5, 0), sharex=ax, rowspan=1, colspan=4, facecolor='#07000d') # 第6行第1列起，占1行4列
+ax1.plot(plot_mat.time[100:160].values, plot_mat.macd[100:160].values, color='#4ee6fd', linewidth=2)  # MACD线
+ax1.plot(plot_mat.time[100:160].values, plot_mat.dea9[100:160].values, color='#e1edf9', linewidth=1)  # DEA线
+ax1.fill_between(plot_mat.time[100:160].values, plot_mat.macd[100:160].values-plot_mat.dea9[100:160].values, 0,
+                 alpha=0.5, facecolors='#00ffe8')  # 填充差值
+ax1.yaxis.set_major_locator(mticker.MaxNLocator())  # 设置纵坐标
+ax1.spines['bottom'].set_color('#5998ff')
+ax1.spines['top'].set_color('#5998ff')
+ax1.spines['left'].set_color('#5998ff')
+ax1.spines['right'].set_color('#5998ff')
+ax1.tick_params(axis='y', colors='w')
+ax1.tick_params(axis='x', colors='w')
+plt.ylabel('MACD', color='w')
+
+plt.plot()
+plt.show()
+```
+MADC图
+![](MADC图.png)
+
+## 绘制一个汇总图
+```python
+fig = plt.figure(facecolor='#07000d', figsize=(15, 10))
+ax = plt.subplot2grid((6, 4), (1, 0), rowspan=4, colspan=4, facecolor='#07000d')
+ax.plot(plot_mat.time[100:160].values, mov_avg_ten[100:160], '#e1edf9', label='10days', linewidth=1.5)  
+ax.plot(plot_mat.time[100:160].values, mov_avg_thirty[100:160], '#4ee6fd', label='10days', linewidth=1.5)
+candlestick_ochl(ax, plot_mat[100:160].values, width=0.6, colorup='#ff1717', colordown='#53c156')
+ax.grid(True, color='w')
+ax.xaxis.set_major_locator(mticker.MaxNLocator(10))
+ax.yaxis.set_major_locator(mticker.MaxNLocator())
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+ax.yaxis.label.set_color('w')
+ax.spines['bottom'].set_color('#5998ff')
+ax.spines['top'].set_color('#5998ff')
+ax.spines['left'].set_color('#5998ff')
+ax.spines['right'].set_color('#5998ff')
+ax.tick_params(axis='y', colors='w')
+ax.tick_params(axis='x', colors='w')
+plt.ylabel('Stock Price and Volume', color='w')
+ax_ = ax.twinx()
+ax_.fill_between(plot_mat.time[100:160].values, 0, Volume.volume[100:160].values,
+                facecolor='#00ffe8', alpha=0.4)
+ax_.grid(False)
+ax_.set_ylim(0, 4*Volume.volume[100:160].values.max())
+ax_.spines['bottom'].set_color('#5998ff')
+ax_.spines['top'].set_color('#5998ff')
+ax_.spines['left'].set_color('#5998ff')
+ax_.spines['right'].set_color('#5998ff')
+ax_.tick_params(axis='y', colors='w')
+ax_.tick_params(axis='x', colors='w')
+ax0 = plt.subplot2grid((6, 4), (0, 0), sharex=ax, rowspan=1, colspan=4, facecolor='#07000d')
+col_rsi = '#c1f9f7'
+col_pos = '#8f2020'
+col_neg = '#386d13'
+ax0.plot(plot_mat.time[100:160].values, plot_mat.rsi[100:160].values, col_rsi, linewidth=1.5)
+ax0.axhline(70, color=col_pos)
+ax0.axhline(30, color=col_neg)
+ax0.fill_between(plot_mat.time[100:160].values, plot_mat.rsi[100:160].values, 70, where=(plot_mat.rsi.values[100:160] >= 70),
+                 facecolors=col_pos)
+ax0.fill_between(plot_mat.time[100:160].values, plot_mat.rsi[100:160].values, 30, where=(plot_mat.rsi.values[100:160] <= 30),
+                 facecolors=col_neg)
+ax0.set_yticks([30, 70])
+ax0.spines['bottom'].set_color("#5998ff")
+ax0.spines['top'].set_color("#5998ff")
+ax0.spines['left'].set_color("#5998ff")
+ax0.spines['right'].set_color("#5998ff")
+ax0.tick_params(axis='x', colors='w')
+ax0.tick_params(axis='y', colors='w')
+plt.ylabel('RSI', color='w')
+ax1 = plt.subplot2grid((6, 4), (5, 0), sharex=ax, rowspan=1, colspan=4, facecolor='#07000d') # 第6行第1列起，占1行4列
+ax1.plot(plot_mat.time[100:160].values, plot_mat.macd[100:160].values, color='#4ee6fd', linewidth=2)  # MACD线
+ax1.plot(plot_mat.time[100:160].values, plot_mat.dea9[100:160].values, color='#e1edf9', linewidth=1)  # DEA线
+ax1.fill_between(plot_mat.time[100:160].values, plot_mat.macd[100:160].values-plot_mat.dea9[100:160].values, 0,
+                 alpha=0.5, facecolors='#00ffe8')  # 填充差值
+ax1.yaxis.set_major_locator(mticker.MaxNLocator())  # 设置纵坐标
+ax1.spines['bottom'].set_color('#5998ff')
+ax1.spines['top'].set_color('#5998ff')
+ax1.spines['left'].set_color('#5998ff')
+ax1.spines['right'].set_color('#5998ff')
+ax1.tick_params(axis='y', colors='w')
+ax1.tick_params(axis='x', colors='w')
+plt.ylabel('MACD', color='w')
+
+plt.plot()
+plt.show()
+```
+汇总图
+![](汇总图.png)
+
+## 将图中3次出现的横坐标调整为1次
+```python
+fig = plt.figure(facecolor='#07000d', figsize=(15, 10))
+ax = plt.subplot2grid((6, 4), (1, 0), rowspan=4, colspan=4, facecolor='#07000d')
+ax.plot(plot_mat.time[100:160].values, mov_avg_ten[100:160], '#e1edf9', label='10days', linewidth=1.5)  
+ax.plot(plot_mat.time[100:160].values, mov_avg_thirty[100:160], '#4ee6fd', label='10days', linewidth=1.5)
+candlestick_ochl(ax, plot_mat[100:160].values, width=0.6, colorup='#ff1717', colordown='#53c156')
+ax.grid(True, color='w')
+ax.xaxis.set_major_locator(mticker.MaxNLocator(10))
+ax.yaxis.set_major_locator(mticker.MaxNLocator())
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+ax.yaxis.label.set_color('w')
+ax.spines['bottom'].set_color('#5998ff')
+ax.spines['top'].set_color('#5998ff')
+ax.spines['left'].set_color('#5998ff')
+ax.spines['right'].set_color('#5998ff')
+ax.tick_params(axis='y', colors='w')
+ax.tick_params(axis='x', colors='w')
+plt.ylabel('Stock Price and Volume', color='w')
+ax_ = ax.twinx()
+ax_.fill_between(plot_mat.time[100:160].values, 0, Volume.volume[100:160].values,
+                facecolor='#00ffe8', alpha=0.4)
+ax_.grid(False)
+ax_.set_ylim(0, 4*Volume.volume[100:160].values.max())
+ax_.spines['bottom'].set_color('#5998ff')
+ax_.spines['top'].set_color('#5998ff')
+ax_.spines['left'].set_color('#5998ff')
+ax_.spines['right'].set_color('#5998ff')
+ax_.tick_params(axis='y', colors='w')
+ax_.tick_params(axis='x', colors='w')
+ax0 = plt.subplot2grid((6, 4), (0, 0), sharex=ax, rowspan=1, colspan=4, facecolor='#07000d')
+col_rsi = '#c1f9f7'
+col_pos = '#8f2020'
+col_neg = '#386d13'
+ax0.plot(plot_mat.time[100:160].values, plot_mat.rsi[100:160].values, col_rsi, linewidth=1.5)
+ax0.axhline(70, color=col_pos)
+ax0.axhline(30, color=col_neg)
+ax0.fill_between(plot_mat.time[100:160].values, plot_mat.rsi[100:160].values, 70, where=(plot_mat.rsi.values[100:160] >= 70),
+                 facecolors=col_pos)
+ax0.fill_between(plot_mat.time[100:160].values, plot_mat.rsi[100:160].values, 30, where=(plot_mat.rsi.values[100:160] <= 30),
+                 facecolors=col_neg)
+ax0.set_yticks([30, 70])
+ax0.spines['bottom'].set_color("#5998ff")
+ax0.spines['top'].set_color("#5998ff")
+ax0.spines['left'].set_color("#5998ff")
+ax0.spines['right'].set_color("#5998ff")
+ax0.tick_params(axis='x', colors='w')
+ax0.tick_params(axis='y', colors='w')
+plt.ylabel('RSI', color='w')
+ax1 = plt.subplot2grid((6, 4), (5, 0), sharex=ax, rowspan=1, colspan=4, facecolor='#07000d')
+ax1.plot(plot_mat.time[100:160].values, plot_mat.macd[100:160].values, color='#4ee6fd', linewidth=2)
+ax1.plot(plot_mat.time[100:160].values, plot_mat.dea9[100:160].values, color='#e1edf9', linewidth=1)
+ax1.fill_between(plot_mat.time[100:160].values, plot_mat.macd[100:160].values-plot_mat.dea9[100:160].values, 0,
+                 alpha=0.5, facecolors='#00ffe8')
+ax1.yaxis.set_major_locator(mticker.MaxNLocator())
+ax1.spines['bottom'].set_color('#5998ff')
+ax1.spines['top'].set_color('#5998ff')
+ax1.spines['left'].set_color('#5998ff')
+ax1.spines['right'].set_color('#5998ff')
+ax1.tick_params(axis='y', colors='w')
+ax1.tick_params(axis='x', colors='w')
+plt.ylabel('MACD', color='w')
+
+plt.setp(ax.get_xticklabels(), visible=False)  # 隐藏ax的x轴
+plt.setp(ax0.get_xticklabels(), visible=False)  # 隐藏ax0的x轴
+plt.suptitle('K lines', color='w')  # 绘制标题
+plt.plot()
+plt.show()
+```
+修改横坐标后的汇总图
+![](修改横坐标后的汇总图.png)
