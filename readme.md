@@ -158,7 +158,7 @@ sz10.plot(ax=ax, y='close', label='000010')
 plt.legend(loc='upper left')
 plt.show()
 ```
-所得折线图![](多只折线对比图.png)  
+所得折线图![](多只折现对比图.png)  
 
 ### 绘制多条股票数据的箱形图  
 ```python
